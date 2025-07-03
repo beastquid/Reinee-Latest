@@ -67,4 +67,4 @@ function App() {
   );
 }
 
-export default App
+import ProtectedRoute from './components/ProtectedRoute';
