@@ -67,7 +67,7 @@ const AdminLogin = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    const cleanEmail = formData.email.trim().toLowerCase();
     if (!validateForm()) return;
 
     // Check rate limiting
@@ -84,22 +84,28 @@ const AdminLogin = () => {
       // First, check if the admin exists in the admins table
       const { data: adminData, error: adminError } = await supabase
   .from("admins")
-  .select("id,email")
-  .eq("email", formData.email);
+  .select("id, email")
+  .eq("email", cleanEmail)
+  .maybeSingle();
 
-
-      if (adminError || !adminData) {
-        rateLimiter.recordAttempt(formData.email);
-        setErrorMessage('Invalid email or password. Please try again.');
-        return;
-      }
+if (adminError) {
+  console.error("Admin lookup error:", adminError);
+  setErrorMessage('Server error. Please try again.');
+  return;
+}
+if (!adminData) {
+  rateLimiter.recordAttempt(cleanEmail);
+  setErrorMessage('You are not an authorized admin.');
+  return;
+}
 
 
       // Try to sign in with Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
+  email: cleanEmail,
+  password: formData.password,
+});
+
 
       if (error) {
         rateLimiter.recordAttempt(formData.email);
