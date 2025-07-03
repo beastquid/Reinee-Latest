@@ -95,7 +95,7 @@ const AdminLogin = () => {
       }
 
       // Try to sign in with Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
       });
