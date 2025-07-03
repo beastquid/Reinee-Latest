@@ -81,6 +81,20 @@ const AdminLogin = () => {
     setIsLoading(true);
 
     try {
+      // First, check if the admin exists in the admins table
+      const { data: adminData, error: adminError } = await supabase
+        .from('admins')
+        .select('id, email')
+        .eq('email', formData.email)
+        .single();
+
+      if (adminError || !adminData) {
+        rateLimiter.recordAttempt(formData.email);
+        setErrorMessage('Invalid email or password. Please try again.');
+        return;
+      }
+
+      // Try to sign in with Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -102,19 +116,6 @@ const AdminLogin = () => {
       }
 
       if (data.user) {
-        // Check if user is an admin by querying the admins table
-        const { data: adminData, error: adminError } = await supabase
-          .from('admins')
-          .select('id')
-          .eq('email', formData.email)
-          .single();
-
-        if (adminError || !adminData) {
-          await supabase.auth.signOut();
-          setErrorMessage('Access denied. Admin privileges required.');
-          return;
-        }
-
         // Successful admin login
         navigate('/admin');
       }
@@ -172,6 +173,21 @@ const AdminLogin = () => {
                 </div>
               </div>
             )}
+
+            {/* Setup Instructions */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4 transition-colors duration-300">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 text-blue-400 dark:text-blue-300 mr-2 mt-0.5" />
+                <div className="text-sm text-blue-800 dark:text-blue-200 transition-colors duration-300">
+                  <p className="font-medium mb-1">Admin Setup Required</p>
+                  <p>To use admin login, you need to:</p>
+                  <ol className="list-decimal list-inside mt-2 space-y-1">
+                    <li>Create an admin user in Supabase Auth</li>
+                    <li>Add the admin's email to the 'admins' table</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
 
             {/* Email Field */}
             <div>
