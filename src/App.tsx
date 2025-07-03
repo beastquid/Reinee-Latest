@@ -1,7 +1,15 @@
+// src/App.tsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 
+// Public components
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import FeaturedCategories from './components/FeaturedCategories';
@@ -17,65 +25,67 @@ import ProductDetail from './components/ProductDetail';
 import Collections from './components/Collections';
 import SizeGuide from './components/SizeGuide';
 
+// Admin components
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 
-function App() {
+// Layout for all public pages
+function PublicLayout() {
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
+      <Navbar />
+      <Outlet />
+      <Footer />
+    </div>
+  );
+}
+
+// Home page itself
+function HomePage() {
+  return (
+    <main>
+      <Hero />
+      <FeaturedCategories />
+      <SizeRange />
+      <NewArrivals />
+      <SocialProof />
+    </main>
+  );
+}
+
+export default function App() {
   return (
     <ThemeProvider>
       <Router>
-        <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
-          <Routes>
-            {/* Admin routes */}
-            <Route path="/admin-login" element={<AdminLogin />} />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
+        <Routes>
+          {/* Admin routes */}
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
 
-            {/* Public routes */}
-            <Route
-              path="/*"
-              element={
-                <>
-                  <Navbar />
-                  <Routes>
-                    <Route
-                      path="/"
-                      element={
-                        <main>
-                          <Hero />
-                          <FeaturedCategories />
-                          <SizeRange />
-                          <NewArrivals />
-                          <SocialProof />
-                        </main>
-                      }
-                    />
-                    <Route path="/concept" element={<Concept />} />
-                    <Route path="/about" element={<About />} />
-                    <Route path="/products" element={<Products />} />
-                    <Route path="/products/:category" element={<Products />} />
-                    <Route path="/product/:id" element={<ProductDetail />} />
-                    <Route path="/collections" element={<Collections />} />
-                    <Route path="/size-guide" element={<SizeGuide />} />
-                    {/* Catch-all: redirect unknown paths to home */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                  <Footer />
-                </>
-              }
-            />
-          </Routes>
-        </div>
+          {/* All public routes share the PublicLayout */}
+          <Route element={<PublicLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="concept" element={<Concept />} />
+            <Route path="about" element={<About />} />
+            <Route path="products" element={<Products />} />
+            <Route path="products/:category" element={<Products />} />
+            <Route path="product/:id" element={<ProductDetail />} />
+            <Route path="collections" element={<Collections />} />
+            <Route path="size-guide" element={<SizeGuide />} />
+
+            {/* Fallback: unknown URLs → home */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
       </Router>
     </ThemeProvider>
   );
 }
-
-export default App;
