@@ -85,15 +85,14 @@ const AdminLogin = () => {
       const { data: adminData, error: adminError } = await supabase
   .from("admins")
   .select("id,email")
-  .eq("email", formData.email.trim().toLowerCase()) // clean input
-  .maybeSingle(); // handles 0 rows safely
+  .eq("email", formData.email);
 
 
       if (adminError || !adminData) {
-  rateLimiter.recordAttempt(formData.email);
-  setErrorMessage('You are not an authorized admin.');
-  return;
-}
+        rateLimiter.recordAttempt(formData.email);
+        setErrorMessage('Invalid email or password. Please try again.');
+        return;
+      }
 
 
       // Try to sign in with Supabase Auth
