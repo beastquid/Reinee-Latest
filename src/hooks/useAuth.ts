@@ -1,28 +1,29 @@
 import { useState, useEffect } from 'react';
-import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import type { Session, User } from '@supabase/supabase-js';
 
-export const useAuth = () => {
+export function useAuth(): { user: User | null; loading: boolean } {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 1️⃣ Fetch current session on mount
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
+    // 2️⃣ Subscribe to auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-    return () => subscription.unsubscribe();
+    // 3️⃣ Cleanup subscription on unmount
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   return { user, loading };
-};
+}
