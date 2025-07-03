@@ -1,3 +1,5 @@
+// src/hooks/useAuth.ts
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
@@ -7,25 +9,20 @@ export function useAuth(): { user: User | null; loading: boolean } {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('useAuth: Initializing...');
-    
     // On mount, get the current session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      console.log('useAuth: Initial session check', { session: !!session, error });
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
     // Listen for login/logout events
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('useAuth: Auth state changed', { event, session: !!session });
+    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
     // Cleanup subscription on unmount
     return () => {
-      console.log('useAuth: Cleaning up listener');
       listener.subscription.unsubscribe();
     };
   }, []);
