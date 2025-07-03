@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Package, Image, Grid3X3, Ruler, Home, Plus, Edit, Trash2, Upload, Save, X, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
 
 interface Product {
   id: string;
@@ -28,7 +27,8 @@ interface HeroData {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -64,13 +64,43 @@ const AdminDashboard = () => {
     background_image_url: ''
   });
 
+  // Handle authentication internally
   useEffect(() => {
-    if (!user) {
-      navigate('/admin-login');
-      return;
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          navigate('/admin-login');
+          return;
+        }
+        setUser(session.user);
+        setAuthLoading(false);
+      } catch (error) {
+        console.error('Auth check error:', error);
+        navigate('/admin-login');
+      }
+    };
+
+    checkAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        navigate('/admin-login');
+      } else {
+        setUser(session.user);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  useEffect(() => {
+    if (user && !authLoading) {
+      loadData();
     }
-    loadData();
-  }, [user, navigate]);
+  }, [user, authLoading]);
 
   const loadData = async () => {
     setLoading(true);
@@ -347,6 +377,17 @@ const AdminDashboard = () => {
     setEditingCollection(collection);
     setShowAddCollection(true);
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white mx-auto mb-4"></div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return null;
