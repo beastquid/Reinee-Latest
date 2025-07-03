@@ -14,32 +14,53 @@ import Products from './components/Products';
 import ProductDetail from './components/ProductDetail';
 import Collections from './components/Collections';
 import SizeGuide from './components/SizeGuide';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './components/AdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <ThemeProvider>
       <Router>
         <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
-          <Navbar />
           <Routes>
-            <Route path="/" element={
-              <main>
-                <Hero />
-                <FeaturedCategories />
-                <SizeRange />
-                <NewArrivals />
-                <SocialProof />
-              </main>
+            {/* Admin Routes */}
+            <Route path="/admin-login" element={<AdminLogin />} />
+            <Route 
+              path="/admin" 
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Public Routes */}
+            <Route path="/*" element={
+              <>
+                <Navbar />
+                <Routes>
+                  <Route path="/" element={
+                    <main>
+                      <Hero />
+                      <FeaturedCategories />
+                      <SizeRange />
+                      <NewArrivals />
+                      <SocialProof />
+                    </main>
+                  } />
+                  <Route path="/concept" element={<Concept />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/products" element={<Products />} />
+                  <Route path="/products/:category" element={<Products />} />
+                  <Route path="/product/:id" element={<ProductDetail />} />
+                  <Route path="/collections" element={<Collections />} />
+                  <Route path="/size-guide" element={<SizeGuide />} />
+                </Routes>
+                <Footer />
+              </>
             } />
-            <Route path="/concept" element={<Concept />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/products" element={<Products />} />
-            <Route path="/products/:category" element={<Products />} />
-            <Route path="/product/:id" element={<ProductDetail />} />
-            <Route path="/collections" element={<Collections />} />
-            <Route path="/size-guide" element={<SizeGuide />} />
           </Routes>
-          <Footer />
         </div>
       </Router>
     </ThemeProvider>
