@@ -83,10 +83,9 @@ const AdminLogin = () => {
     try {
       // First, check if the admin exists in the admins table
       const { data: adminData, error: adminError } = await supabase
-        .from('admins')
-        .select('id, email')
-        .eq('email', formData.email)
-        .single();
+        .from("admins")
+  .select("id,email")
+  .eq("email", formData.email);
 
       if (adminError || !adminData) {
         rateLimiter.recordAttempt(formData.email);
