@@ -1,87 +1,64 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { rateLimiter } from '../utils/rateLimiter';
 
 const AdminLogin: React.FC = () => {
-  const navigate = useNavigate();
-
-  // ————— Authentication State —————
+  // — auth state —
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // — on mount, check session + subscribe —
   useEffect(() => {
-    // 1) On mount, fetch existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setAuthLoading(false);
     });
-    // 2) Listen for login/logout
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setAuthLoading(false);
     });
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    return () => listener.subscription.unsubscribe();
   }, []);
 
-  // If we’re still checking session, show loader
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Loader2 className="animate-spin w-8 h-8 text-gray-600 dark:text-gray-400" />
-      </div>
-    );
-  }
-  // If already logged in, go straight to /admin
-  if (user) {
-    navigate('/admin');
-    return null;
-  }
-
-  // ————— Form State —————
+  // — form state —
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState<{ [k: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Clear field errors on change
-  useEffect(() => {
-    if (Object.keys(errors).length) setErrors({});
-    if (errorMessage) setErrorMessage('');
-  }, [formData.email, formData.password]);
+  // — handle input change —
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFormData((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+  // — validate —
   const validateForm = (): boolean => {
-    const newErrors: any = {};
-    if (!formData.email) newErrors.email = 'Email is required';
+    const errs: any = {};
+    if (!formData.email) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      newErrors.email = 'Invalid email address';
-    if (!formData.password) newErrors.password = 'Password is required';
+      errs.email = 'Invalid email';
+    if (!formData.password) errs.password = 'Password is required';
     else if (formData.password.length < 6)
-      newErrors.password = 'Password must be at least 6 characters';
-    setErrors(newErrors);
-    return !Object.keys(newErrors).length;
+      errs.password = 'Password must be at least 6 characters';
+    setErrors(errs);
+    return !Object.keys(errs).length;
   };
 
+  // — submission —
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = formData.email.trim().toLowerCase();
     if (!validateForm()) return;
-
-    // Rate limit
     if (rateLimiter.isRateLimited(cleanEmail)) {
-      const rem = rateLimiter.getRemainingTime(cleanEmail);
-      const mins = Math.ceil(rem / 60000);
-      setErrorMessage(`Too many attempts. Try again in ${mins} min.`);
+      const min = Math.ceil(rateLimiter.getRemainingTime(cleanEmail) / 60000);
+      setErrorMessage(`Too many attempts. Try again in ${min} min.`);
       return;
     }
-
     setIsLoading(true);
     try {
-      // 1) Sign in first
+      // 1) sign in
       const { data: signInData, error: signInError } =
         await supabase.auth.signInWithPassword({
           email: cleanEmail,
@@ -90,25 +67,27 @@ const AdminLogin: React.FC = () => {
       if (signInError) {
         rateLimiter.recordAttempt(cleanEmail);
         const msg = signInError.message;
-        if (msg.includes('Invalid login credentials'))
-          setErrorMessage('Invalid email or password.');
-        else if (msg.includes('Email not confirmed'))
-          setErrorMessage('Please confirm your email.');
-        else if (msg.includes('Too many requests'))
-          setErrorMessage('Too many login attempts. Try later.');
-        else setErrorMessage('Login failed.');
+        setErrorMessage(
+          msg.includes('Invalid login credentials')
+            ? 'Invalid email or password.'
+            : msg.includes('Email not confirmed')
+            ? 'Please confirm your email.'
+            : msg.includes('Too many requests')
+            ? 'Too many login attempts. Try later.'
+            : 'Login failed.'
+        );
         return;
       }
 
-      // 2) Now check whitelist
+      // 2) whitelist check
       const { data: adminData, error: adminError } = await supabase
         .from('admins')
-        .select('id, email')
+        .select('id,email')
         .eq('email', cleanEmail)
         .maybeSingle();
       if (adminError) {
-        console.error('Admin lookup error:', adminError);
-        setErrorMessage('Server error. Please try again.');
+        console.error(adminError);
+        setErrorMessage('Server error. Try again.');
         return;
       }
       if (!adminData) {
@@ -117,18 +96,31 @@ const AdminLogin: React.FC = () => {
         return;
       }
 
-      // 3) Redirect to dashboard
-      if (signInData.user) {
-        navigate('/admin');
-      }
+      // success
+      // signInData.user exists -> useEffect redirect or fall through
     } catch (err) {
-      console.error('Unexpected error:', err);
-      setErrorMessage('Network error. Check connection.');
+      console.error(err);
+      setErrorMessage('Network error.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // — 1) still loading? show loader —
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="animate-spin w-8 h-8 text-gray-600 dark:text-gray-400" />
+      </div>
+    );
+  }
+
+  // — 2) already signed in? redirect away —
+  if (user) {
+    return <Navigate to="/admin" replace />;
+  }
+
+  // — 3) show login form —
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -137,84 +129,65 @@ const AdminLogin: React.FC = () => {
           <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-gray-900 dark:bg-white mb-6">
             <Lock className="h-6 w-6 text-white dark:text-gray-900" />
           </div>
-          <h2 className="text-3xl font-light text-gray-900 dark:text-white">
-            Admin Access
-          </h2>
+          <h2 className="text-3xl font-light text-gray-900 dark:text-white">Admin Access</h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Sign in to access the admin dashboard
           </p>
         </div>
+
         {/* Form */}
         <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 p-6">
           <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* Error */}
             {errorMessage && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
                 <div className="flex items-center">
                   <AlertCircle className="h-5 w-5 text-red-400 dark:text-red-300 mr-2" />
-                  <p className="text-sm text-red-800 dark:text-red-200">
-                    {errorMessage}
-                  </p>
+                  <p className="text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
                 </div>
               </div>
             )}
-            {/* Instructions */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 text-blue-400 dark:text-blue-300 mr-2 mt-0.5" />
-                <div className="text-sm text-blue-800 dark:text-blue-200">
-                  <p className="font-medium mb-1">Admin Setup Required</p>
-                  <ol className="list-decimal list-inside space-y-1">
-                    <li>Created an Auth user in Supabase</li>
-                    <li>Added that email to the <code>admins</code> table</li>
-                  </ol>
-                </div>
-              </div>
-            </div>
-            {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </div>
+                <Mail className="absolute inset-y-0 left-0 pl-3 h-5 w-5 text-gray-400 dark:text-gray-500" />
                 <input
                   id="email"
                   name="email"
                   type="email"
                   required
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent ${
-                    errors.email ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
-                  } text-gray-900 dark:text-white`}
-                  placeholder="Enter your email"
+                  onChange={handleInputChange}
+                  placeholder="you@example.com"
+                  className={`block w-full pl-10 pr-3 py-3 border rounded-md shadow-sm ${
+                    errors.email
+                      ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
+                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
+                  } focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent text-gray-900 dark:text-white`}
                 />
               </div>
               {errors.email && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.email}</p>}
             </div>
-            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </div>
+                <Lock className="absolute inset-y-0 left-0 pl-3 h-5 w-5 text-gray-400 dark:text-gray-500" />
                 <input
                   id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent ${
-                    errors.password ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
-                  } text-gray-900 dark:text-white`}
+                  onChange={handleInputChange}
                   placeholder="Enter your password"
+                  className={`block w-full pl-10 pr-10 py-3 border rounded-md shadow-sm ${
+                    errors.password
+                      ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
+                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
+                  } focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent text-gray-900 dark:text-white`}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500">
                   {showPassword ? <EyeOff /> : <Eye />}
@@ -222,31 +195,21 @@ const AdminLogin: React.FC = () => {
               </div>
               {errors.password && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.password}</p>}
             </div>
-            {/* Submit */}
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Signing in…
-                  </>
-                ) : (
-                  'Sign In'
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="animate-spin w-5 h-5 mr-2" />
+                  Signing in…
+                </>
+              ) : (
+                'Sign In'
+              )}
+            </button>
           </form>
-        </div>
-
-        {/* Back Link */}
-        <div className="text-center">
-          <button onClick={() => navigate('/')} className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-            ← Back to website
-          </button>
         </div>
       </div>
     </div>
@@ -254,4 +217,3 @@ const AdminLogin: React.FC = () => {
 };
 
 export default AdminLogin;
-
