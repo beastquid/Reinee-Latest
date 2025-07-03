@@ -5,14 +5,11 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { rateLimiter } from '../utils/rateLimiter';
 
-const AdminLogin = () => {
+const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -27,108 +24,95 @@ const AdminLogin = () => {
   // Clear error message after 5 seconds
   useEffect(() => {
     if (errorMessage) {
-      const timer = setTimeout(() => {
-        setErrorMessage('');
-      }, 5000);
+      const timer = setTimeout(() => setErrorMessage(''), 5000);
       return () => clearTimeout(timer);
     }
   }, [errorMessage]);
 
-  // Clear errors on input change
+  // Clear field‐specific errors when inputs change
   useEffect(() => {
-    if (Object.keys(errors).length > 0) {
-      setErrors({});
-    }
-    if (errorMessage) {
-      setErrorMessage('');
-    }
+    if (Object.keys(errors).length) setErrors({});
+    if (errorMessage) setErrorMessage('');
   }, [formData.email, formData.password]);
 
   const validateForm = (): boolean => {
-    const newErrors: {[key: string]: string} = {};
-
-    // Email validation
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    const newErrors: { [key: string]: string } = {};
+    if (!formData.email) newErrors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
       newErrors.email = 'Please enter a valid email address';
-    }
 
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
+    if (!formData.password) newErrors.password = 'Password is required';
+    else if (formData.password.length < 6)
       newErrors.password = 'Password must be at least 6 characters';
-    }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return !Object.keys(newErrors).length;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1️⃣ sanitize email
     const cleanEmail = formData.email.trim().toLowerCase();
+
+    // 2️⃣ validate inputs
     if (!validateForm()) return;
 
-    // Check rate limiting
-    if (rateLimiter.isRateLimited(formData.email)) {
-      const remainingTime = rateLimiter.getRemainingTime(formData.email);
-      const minutes = Math.ceil(remainingTime / (60 * 1000));
-      setErrorMessage(`Too many failed attempts. Please try again in ${minutes} minutes.`);
+    // 3️⃣ rate limit
+    if (rateLimiter.isRateLimited(cleanEmail)) {
+      const rem = rateLimiter.getRemainingTime(cleanEmail);
+      const minutes = Math.ceil(rem / 60000);
+      setErrorMessage(`Too many failed attempts. Try again in ${minutes} min.`);
       return;
     }
 
     setIsLoading(true);
-
     try {
-      // First, check if the admin exists in the admins table
-      const { data: adminData, error: adminError } = await supabase
-  .from("admins")
-  .select("id, email")
-  .eq("email", cleanEmail)
-  .maybeSingle();
+      // 4️⃣ try to sign in
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: formData.password,
+        });
 
-if (adminError) {
-  console.error("Admin lookup error:", adminError);
-  setErrorMessage('Server error. Please try again.');
-  return;
-}
-if (!adminData) {
-  rateLimiter.recordAttempt(cleanEmail);
-  setErrorMessage('You are not an authorized admin.');
-  return;
-}
-
-
-      // Try to sign in with Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
-  email: cleanEmail,
-  password: formData.password,
-});
-
-
-      if (error) {
-        rateLimiter.recordAttempt(formData.email);
-        
-        if (error.message.includes('Invalid login credentials')) {
+      if (signInError) {
+        rateLimiter.recordAttempt(cleanEmail);
+        const msg = signInError.message;
+        if (msg.includes('Invalid login credentials'))
           setErrorMessage('Invalid email or password. Please try again.');
-        } else if (error.message.includes('Email not confirmed')) {
-          setErrorMessage('Please check your email and confirm your account.');
-        } else if (error.message.includes('Too many requests')) {
-          setErrorMessage('Too many login attempts. Please try again later.');
-        } else {
-          setErrorMessage('Login failed. Please try again.');
-        }
+        else if (msg.includes('Email not confirmed'))
+          setErrorMessage('Please confirm your email first.');
+        else if (msg.includes('Too many requests'))
+          setErrorMessage('Too many login attempts. Try again later.');
+        else setErrorMessage('Login failed. Please try again.');
         return;
       }
 
-      if (data.user) {
-        // Successful admin login
+      // 5️⃣ now that we're authenticated, check the whitelist
+      const { data: adminData, error: adminError } = await supabase
+        .from('admins')
+        .select('id, email')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      if (adminError) {
+        console.error('Admin lookup error:', adminError);
+        setErrorMessage('Server error. Please try again.');
+        return;
+      }
+      if (!adminData) {
+        rateLimiter.recordAttempt(cleanEmail);
+        setErrorMessage('You are not an authorized admin.');
+        return;
+      }
+
+      // 6️⃣ finally, redirect
+      if (signInData.user) {
         navigate('/admin');
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      setErrorMessage('Network error. Please check your connection and try again.');
+    } catch (err) {
+      console.error('Login error:', err);
+      setErrorMessage('Network error. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -136,69 +120,68 @@ if (!adminData) {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-600 dark:text-gray-400" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="animate-spin w-8 h-8 text-gray-600 dark:text-gray-400" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 bg-gray-900 dark:bg-white rounded-full flex items-center justify-center mb-6">
+          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-gray-900 dark:bg-white mb-6">
             <Lock className="h-6 w-6 text-white dark:text-gray-900" />
           </div>
-          <h2 className="text-3xl font-light tracking-wider text-gray-900 dark:text-white transition-colors duration-300">
+          <h2 className="text-3xl font-light text-gray-900 dark:text-white">
             Admin Access
           </h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 transition-colors duration-300">
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Sign in to access the admin dashboard
           </p>
         </div>
 
-        {/* Login Form */}
-        <div className="bg-white dark:bg-gray-800 py-8 px-6 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 transition-colors duration-300">
+        {/* Form */}
+        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 p-6">
           <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* Error Message */}
+            {/* Error */}
             {errorMessage && (
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 animate-fade-in-up transition-colors duration-300">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
                 <div className="flex items-center">
                   <AlertCircle className="h-5 w-5 text-red-400 dark:text-red-300 mr-2" />
-                  <p className="text-sm text-red-800 dark:text-red-200 transition-colors duration-300">
+                  <p className="text-sm text-red-800 dark:text-red-200">
                     {errorMessage}
                   </p>
                 </div>
               </div>
             )}
-
-            {/* Setup Instructions */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4 transition-colors duration-300">
+            {/* Instructions */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
               <div className="flex items-start">
                 <AlertCircle className="h-5 w-5 text-blue-400 dark:text-blue-300 mr-2 mt-0.5" />
-                <div className="text-sm text-blue-800 dark:text-blue-200 transition-colors duration-300">
+                <div className="text-sm text-blue-800 dark:text-blue-200">
                   <p className="font-medium mb-1">Admin Setup Required</p>
-                  <p>To use admin login, you need to:</p>
+                  <p>Make sure you:</p>
                   <ol className="list-decimal list-inside mt-2 space-y-1">
-                    <li>Create an admin user in Supabase Auth</li>
-                    <li>Add the admin's email to the 'admins' table</li>
+                    <li>Created an Auth user in Supabase</li>
+                    <li>Added that email to the <code>admins</code> table</li>
                   </ol>
                 </div>
               </div>
             </div>
 
-            {/* Email Field */}
+            {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 transition-colors duration-300">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
                 Email Address
               </label>
               <div className="relative">
@@ -209,28 +192,30 @@ if (!adminData) {
                   id="email"
                   name="email"
                   type="email"
-                  autoComplete="email"
                   required
                   value={formData.email}
                   onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent transition-all duration-300 ${
-                    errors.email
-                      ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
-                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
-                  } text-gray-900 dark:text-white`}
                   placeholder="Enter your email"
+                  className={`block w-full pl-10 pr-3 py-3 border rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent ${
+                    errors.email
+                      ? 'border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20'
+                      : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700'
+                  } text-gray-900 dark:text-white`}
                 />
               </div>
               {errors.email && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400 animate-fade-in-up transition-colors duration-300">
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                   {errors.email}
                 </p>
               )}
             </div>
 
-            {/* Password Field */}
+            {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 transition-colors duration-300">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >
                 Password
               </label>
               <div className="relative">
@@ -241,47 +226,42 @@ if (!adminData) {
                   id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
                   required
                   value={formData.password}
                   onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 focus:border-transparent transition-all duration-300 ${
-                    errors.password
-                      ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
-                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
-                  } text-gray-900 dark:text-white`}
                   placeholder="Enter your password"
+                  className={`block w-full pl-10 pr-10 py-3 border rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent ${
+                    errors.password
+                      ? 'border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20'
+                      : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700'
+                  } text-gray-900 dark:text-white`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-300"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {showPassword ? <EyeOff /> : <Eye />}
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400 animate-fade-in-up transition-colors duration-300">
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                   {errors.password}
                 </p>
               )}
             </div>
 
-            {/* Submit Button */}
+            {/* Submit */}
             <div>
               <button
                 type="submit"
                 disabled={isLoading}
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 dark:focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]"
+                className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Signing in...
+                    Signing in…
                   </>
                 ) : (
                   'Sign In'
@@ -291,11 +271,11 @@ if (!adminData) {
           </form>
         </div>
 
-        {/* Footer */}
+        {/* Back Link */}
         <div className="text-center">
           <button
             onClick={() => navigate('/')}
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-300"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
           >
             ← Back to website
           </button>
