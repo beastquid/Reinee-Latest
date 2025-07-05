@@ -1,12 +1,44 @@
 import React from 'react';
+import { useHero } from '../hooks/useHero';
+import { Loader2 } from 'lucide-react';
 
 const Hero = () => {
+  const { hero, loading, error } = useHero();
+
+  if (loading) {
+    return (
+      <div className="w-full relative overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-gray-800" style={{ height: 'calc(100vh - 64px)' }}>
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-600 dark:text-gray-400 mx-auto mb-4" />
+          <p className="text-sm text-gray-600 dark:text-gray-400">Loading hero section...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full relative overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-gray-800" style={{ height: 'calc(100vh - 64px)' }}>
+        <div className="text-center">
+          <p className="text-sm text-red-600 dark:text-red-400">Failed to load hero section</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback to default if no hero data
+  const heroData = hero || {
+    title: 'REINEE OFFICIAL',
+    subtitle: 'Elegant footwear for the modern woman',
+    background_image_url: '/Luna-Hero-image.jpg'
+  };
+
   return (
     <div className="w-full relative overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
       {/* Image with fade-in animation */}
       <div className="w-full h-full animate-fade-in">
         <img
-          src="/Luna-Hero-image.jpg"
+          src={heroData.background_image_url || '/Luna-Hero-image.jpg'}
           alt="Reinee Luna Clear Wedges - Elegant fashion model showcasing premium footwear collection"
           className="w-full h-full object-cover"
           loading="eager"

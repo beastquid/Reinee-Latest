@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
-import { products } from '../data/products';
+import { ChevronLeft, Loader2 } from 'lucide-react';
+import { useProducts } from '../hooks/useProducts';
 import ImageOptimizer from './ImageOptimizer';
 
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { products, loading, error } = useProducts();
   const [selectedColor, setSelectedColor] = useState('');
   
   const product = products.find(p => p.id === id);
@@ -16,6 +17,29 @@ const ProductDetail = () => {
       setSelectedColor(product.colors[0]);
     }
   }, [product]);
+
+  if (loading) {
+    return (
+      <div className="pt-20 min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
+        <div className="flex justify-center items-center py-20">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-600 dark:text-gray-400 mx-auto mb-4" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">Loading product...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="pt-20 min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <p className="text-red-600 dark:text-red-400 transition-colors duration-300">Failed to load product</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -28,7 +52,7 @@ const ProductDetail = () => {
   }
 
   const getColorImage = (color: string) => {
-    const baseImagePath = product.image.replace('.jpg', '');
+    const baseImagePath = product.image_url.replace('.jpg', '');
     return `${baseImagePath}-${color.toLowerCase().replace(/ /g, '-')}.jpg`;
   };
 
@@ -79,7 +103,7 @@ const ProductDetail = () => {
           {/* Product Image */}
           <div className="aspect-square overflow-hidden bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-300">
             <ImageOptimizer
-              src={selectedColor ? getColorImage(selectedColor) : product.image}
+              src={selectedColor ? getColorImage(selectedColor) : product.image_url}
               alt={`${product.name} in ${selectedColor}`}
               className="w-full h-full hover:scale-105 transition-transform duration-500"
             />
@@ -142,9 +166,9 @@ const ProductDetail = () => {
                 </div>
               ) : (
                 <>
-                  {product.shopeeLink && (
+                  {product.shopee_link && (
                     <a
-                      href={product.shopeeLink}
+                      href={product.shopee_link}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full bg-[#ee4d2d] hover:bg-[#d23f23] text-white py-2.5 sm:py-3 rounded-full flex items-center justify-center space-x-2 transition-all duration-300 text-sm sm:text-base hover:scale-105 shadow-md hover:shadow-lg"

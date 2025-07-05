@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Instagram, Search } from 'lucide-react';
-import { products } from '../data/products';
+import { Menu, X, Instagram, Search, Loader2 } from 'lucide-react';
+import { useProducts } from '../hooks/useProducts';
 import ThemeToggle from './ThemeToggle';
 
 const TikTokIcon = () => (
@@ -22,8 +22,9 @@ const TikTokIcon = () => (
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<typeof products>([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const navigate = useNavigate();
+  const { products, loading: productsLoading } = useProducts();
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -109,7 +110,11 @@ const Navbar = () => {
                     onChange={(e) => handleSearch(e.target.value)}
                     className="w-full py-2 pl-4 pr-10 border-b border-gray-200 dark:border-gray-600 focus:outline-none focus:border-gray-400 dark:focus:border-gray-400 bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-300"
                   />
-                  <Search className="absolute right-2 top-2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  {productsLoading ? (
+                    <Loader2 className="absolute right-2 top-2 h-5 w-5 text-gray-400 dark:text-gray-500 animate-spin" />
+                  ) : (
+                    <Search className="absolute right-2 top-2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  )}
                 </div>
               </div>
 
@@ -125,7 +130,7 @@ const Navbar = () => {
                         className="w-full flex items-start space-x-4 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all duration-300 text-left transform hover:scale-[1.02]"
                       >
                         <img
-                          src={product.image}
+                          src={product.image_url}
                           alt={product.name}
                           className="w-16 h-16 object-cover rounded-md"
                         />
@@ -142,7 +147,7 @@ const Navbar = () => {
                   </div>
                 )}
 
-                {searchQuery && searchResults.length === 0 && (
+                {searchQuery && searchResults.length === 0 && !productsLoading && (
                   <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8">
                     No products found for "{searchQuery}"
                   </p>
